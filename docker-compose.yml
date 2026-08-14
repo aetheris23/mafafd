@@ -1,0 +1,192 @@
+# =============================================================================
+# MAFAFD — full production-like stack
+#
+#   docker compose up -d --build
+#
+# Services: postgres, redis, rabbitmq, ingestion (8080), gateway (8081),
+#           worker-rules, worker-ai, frontend (3000), prometheus (9090),
+#           grafana (3001)
+# =============================================================================
+
+name: mafafd
+
+x-backend-defaults: &backend-defaults
+  build:
+    context: ./backend
+  environment: &backend-env
+    ENV: production
+    LOG_LEVEL: info
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: 5432
+    POSTGRES_USER: ${POSTGRES_USER:-mafafd}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-pg}
+    POSTGRES_DB: ${POSTGRES_DB:-mafafd}
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    REDIS_PASSWORD: ""
+    REDIS_DB: 0
+    MQ_PROVIDER: rabbit
+    RABBITMQ_URL: amqp://${RABBITMQ_USER:-mafafd}:${RABBITMQ_PASSWORD:-change-me-rabbit}@rabbitmq:5672/
+    JWT_SECRET: ${JWT_SECRET:-change-this-32-char-min-secret-for-prod}
+    JWT_TTL_HOURS: 12
+    TOKEN_BUCKET_RATE_PER_MIN: ${TOKEN_BUCKET_RATE_PER_MIN:-600}
+    TOKEN_BUCKET_BURST: ${TOKEN_BUCKET_BURST:-1200}
+    SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    AI_PROVIDER: ${AI_PROVIDER:-local}
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+    AI_FALLBACK_LOCAL: ${AI_FALLBACK_LOCAL:-true}
+    MAX_BODY_BYTES: 32768
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # ------------------------------------------------------------------ data --
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mafafd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-pg}
+      POSTGRES_DB: ${POSTGRES_DB:-mafafd}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432" # mapped to 5433 to avoid clashing with any local postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mafafd} -d ${POSTGRES_DB:-mafafd}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-mafafd}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-me-rabbit}
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # -------------------------------------------------------------- backend --
+  ingestion:
+    <<: *backend-defaults
+    environment:
+      <<: *backend-env
+      INGESTION_PORT: 8080
+    command: ["/app/bin/ingestion"]
+    ports:
+      - "8080:8080"
+
+  worker-rules:
+    <<: *backend-defaults
+    environment:
+      <<: *backend-env
+      WORKER_CONSUMERS: ${WORKER_CONSUMERS:-8}
+    command: ["/app/bin/worker-rules"]
+    deploy:
+      replicas: ${RULES_REPLICAS:-1}
+
+  worker-ai:
+    <<: *backend-defaults
+    environment:
+      <<: *backend-env
+      WORKER_CONSUMERS: ${AI_WORKER_CONSUMERS:-4}
+    command: ["/app/bin/worker-ai"]
+
+  gateway:
+    <<: *backend-defaults
+    environment:
+      <<: *backend-env
+      GATEWAY_PORT: 8081
+    command: ["/app/bin/gateway"]
+    ports:
+      - "8081:8081"
+
+  # ------------------------------------------------------------- frontend --
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8081}
+    environment:
+      GATEWAY_INTERNAL_URL: http://gateway:8081
+    ports:
+      - "3000:3000"
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
+  # -------------------------------------------------------- observability --
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - gateway
+      - ingestion
+      - worker-rules
+      - worker-ai
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitmqdata:
+  promdata:
+  grafanadata:

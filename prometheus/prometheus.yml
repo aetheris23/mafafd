@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "mafafd-services"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - ingestion:8080
+          - gateway:8081
+          - worker-rules:9091
+          - worker-ai:9092
+        labels:
+          app: mafafd
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
