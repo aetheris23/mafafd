@@ -56,7 +56,7 @@ tidy:
 
 # ------------------------------------------- local infrastructure (native) ---
 # PostgreSQL: own cluster so the system install stays untouched.
-.PHONY: pg-init pg-start pg-stop pg-psql
+.PHONY: pg-init pg-start pg-stop pg-psql db-reset
 pg-init:
 	@test -d $(PGDATA) || $(PGBIN)/initdb -D $(PGDATA) -U $(PGUSER) --auth=trust --no-locale -E UTF8
 	@echo ">> cluster ready at $(PGDATA) (superuser $(PGUSER))"
@@ -70,6 +70,19 @@ pg-start:
 	@createdb -h $(PGHOST) -p $(PGPORT) -U $(PGUSER) mafafd 2>/dev/null || true
 	@psql -h $(PGHOST) -p $(PGPORT) -U $(PGUSER) -d mafafd -f db/init/001_schema.sql
 	@echo ">> postgres up on $(PGHOST):$(PGPORT) (db=mafafd, user=$(PGUSER))"
+
+# Drop the mafafd DB and recreate it (empty, schema applied). The demo tenant,
+# users and historical transactions are re-seeded automatically on the next
+# gateway boot (SEED_DEMO_DATA=true). Backend services are stopped first so no
+# connection blocks the drop.
+db-reset:
+	@echo ">> stopping services that hold DB connections..."
+	@$(MAKE) stop > /dev/null 2>&1 || true
+	@$(MAKE) pg-start > /dev/null 2>&1
+	@dropdb --if-exists -h $(PGHOST) -p $(PGPORT) -U $(PGUSER) mafafd
+	@createdb -h $(PGHOST) -p $(PGPORT) -U $(PGUSER) mafafd
+	@psql -h $(PGHOST) -p $(PGPORT) -U $(PGUSER) -d mafafd -f db/init/001_schema.sql
+	@echo ">> database mafafd dropped and recreated (demo data re-seeds on next 'make dev')"
 
 pg-stop:
 	@$(PGBIN)/pg_ctl -D $(PGDATA) stop -m fast || true
@@ -100,6 +113,7 @@ infra-stop: redis-stop pg-stop
 .PHONY: run run-ingestion run-rules run-ai run-gateway stop logs
 run: backend
 	@mkdir -p $(LOGS)
+	@pkill -x ingestion 2>/dev/null; pkill -x gateway 2>/dev/null; pkill -x worker-rules 2>/dev/null; pkill -x worker-ai 2>/dev/null; true
 	@setsid nohup $(BIN)/gateway       > $(LOGS)/gateway.log 2>&1 &
 	@setsid nohup $(BIN)/worker-rules  > $(LOGS)/worker-rules.log 2>&1 &
 	@setsid nohup $(BIN)/worker-ai     > $(LOGS)/worker-ai.log 2>&1 &
@@ -131,6 +145,7 @@ feeder: backend
 
 feeder-start: backend
 	@mkdir -p $(LOGS)
+	@pkill -x feeder 2>/dev/null; true
 	@setsid nohup $(BIN)/feeder -interval 5 > $(LOGS)/feeder.log 2>&1 &
 	@sleep 1
 	@echo ">> feeder started (see $(LOGS)/feeder.log); stop with 'make feeder-stop'"
@@ -140,15 +155,49 @@ feeder-stop:
 	@echo ">> feeder stopped"
 
 # ---------------------------------------------------------------- frontend ----
-.PHONY: frontend-dev frontend-build
+.PHONY: frontend-dev frontend-build frontend-start
 frontend-dev:
 	@cd $(FRONTEND) && npm i --no-audit --no-fund && npm run dev
 
 frontend-build: frontend
 
+frontend-start:
+	@mkdir -p $(LOGS)
+	@pkill -f "next [d]ev" 2>/dev/null; true
+	@cd $(FRONTEND) && npm i --no-audit --no-fund > /dev/null 2>&1 || true
+	@setsid nohup npm --prefix $(FRONTEND) run dev > $(LOGS)/frontend.log 2>&1 &
+	@sleep 3
+	@echo ">> frontend starting on :3000 (log: $(LOGS)/frontend.log)"
+
 .PHONY: frontend-stop
 frontend-stop:
-	@pkill -f "next start" 2>/dev/null; pkill -f "next dev" 2>/dev/null; true
+	@pkill -f "next [s]tart" 2>/dev/null; pkill -f "next [d]ev" 2>/dev/null; true
+
+# ------------------------------------------------------------- one-command ----
+# `make dev` boots the ENTIRE stack from a cold start: infra -> backend services
+# -> feeder -> frontend. `make dev-fresh` also drops the DB first so the demo
+# tenant + realistic historical transactions get re-seeded.
+.PHONY: dev dev-fresh start-all
+dev: infra-start run feeder-start frontend-start
+	@echo "================================================================"
+	@echo ">> MAFAFD is running:"
+	@echo ">>   dashboard    http://localhost:3000   admin@acme.dev / Acme-Admin-2026!"
+	@echo ">>   ingestion    http://localhost:8080/health"
+	@echo ">>   gateway      http://localhost:8081/health"
+	@echo ">>   feeder       make feeder-stop to stop, make logs to tail logs"
+	@echo ">>   stop all     make stop-all"
+	@echo "================================================================"
+
+start-all: dev
+
+dev-fresh:
+	@echo ">> dropping and recreating the database..."
+	@$(MAKE) db-reset
+	@$(MAKE) dev
+
+.PHONY: stop-all
+stop-all: stop frontend-stop infra-stop
+	@echo ">> everything stopped"
 
 # ------------------------------------------------------------------ k6 ------
 .PHONY: k6

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/mafafd/backend/internal/data"
 	"github.com/mafafd/backend/internal/models"
 )
 
@@ -68,10 +69,6 @@ var (
 		"tok_visa_7f2a1b3c", "tok_mc_90e4c2d1", "tok_visa_5c8d9e01",
 		"tok_mc_12ab34cd", "tok_visa_0f3a9b8c", "tok_mc_deadbeef",
 		"tok_visa_4b6d8e0f", "tok_mc_77a1b2c3",
-	}
-	merchants = []string{
-		"crypto_exchange", "online_retail", "ride_sharing", "freelance",
-		"coffee_shop", "grocery", "digital_wallet",
 	}
 	locales = []struct {
 		country string
@@ -158,11 +155,13 @@ func splitCSV(s string) []string {
 func (c *config) tick(ctx context.Context, rng *rand.Rand) error {
 	prices, err := fetchPrices(ctx, c.assets)
 	if err != nil {
-		return fmt.Errorf("prices: %w", err)
+		log.Printf("prices unavailable (%v) — using static fallback", err)
+		prices = fallbackFor(c.assets)
 	}
 	fx, err := fetchFX(ctx)
 	if err != nil {
-		return fmt.Errorf("fx: %w", err)
+		log.Printf("fx unavailable (%v) — using static fallback", err)
+		fx = fallbackFX()
 	}
 
 	n := 1 + rng.Intn(2) // 1-2 transactions per tick
@@ -206,6 +205,30 @@ func fetchFX(ctx context.Context) (map[string]float64, error) {
 	return out.Rates, nil
 }
 
+// Static approximations used when the live providers are unreachable or
+// rate-limited, so the demo keeps streaming transactions offline.
+var staticPrices = map[string]float64{
+	"bitcoin": 97000, "ethereum": 3400, "solana": 190, "cardano": 0.95,
+	"polkadot": 6.5, "ripple": 2.3,
+}
+
+func fallbackFor(ids []string) map[string]float64 {
+	out := map[string]float64{}
+	for _, id := range ids {
+		if v, ok := staticPrices[id]; ok {
+			out[id] = v
+		}
+	}
+	if len(out) == 0 {
+		out["bitcoin"] = staticPrices["bitcoin"]
+	}
+	return out
+}
+
+func fallbackFX() map[string]float64 {
+	return map[string]float64{"IDR": 16200, "EUR": 0.92, "JPY": 149, "SGD": 1.34}
+}
+
 func getJSON(ctx context.Context, u string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -223,7 +246,9 @@ func getJSON(ctx context.Context, u string, dst any) error {
 	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(dst)
 }
 
-// genTxn builds a transaction whose value is derived from live market data.
+// genTxn builds a transaction whose value is derived from live market data but
+// whose merchant / payment-channel details look like a real purchase (e.g. a
+// GoPay e-wallet top-up at Alfamart, or a Visa order on Binance).
 func (c *config) genTxn(rng *rand.Rand, prices map[string]float64, fx map[string]float64) models.TransactionInput {
 	asset := c.assets[rng.Intn(len(c.assets))]
 	price := prices[asset]
@@ -231,16 +256,9 @@ func (c *config) genTxn(rng *rand.Rand, prices map[string]float64, fx map[string
 	idr := fx["IDR"]
 	useIDR := idr > 0 && rng.Float64() < idrTxnChance
 
-	currency := "USD"
-	amount := pickAmount(rng)
-	if useIDR {
-		currency = "IDR"
-		amount = math.Round(amount*idr*100) / 100
-	}
-
 	loc := locales[rng.Intn(len(locales))]
 	// Slight regional bias: IDR transactions come from Indonesian locales.
-	if currency == "IDR" {
+	if useIDR {
 		idLoc := []struct {
 			country string
 			city    string
@@ -250,13 +268,28 @@ func (c *config) genTxn(rng *rand.Rand, prices map[string]float64, fx map[string
 		loc.country, loc.city, loc.ip = l.country, l.city, l.ip
 	}
 
+	merchant := data.RandomMerchant(rng, loc.country)
+	currency := "USD"
+	if useIDR {
+		currency = "IDR"
+	}
+
 	email := emails[rng.Intn(len(emails))]
 	c.seq++
+
+	// Amounts that look real for the merchant type. Crypto exchange orders are
+	// the deliberately-large spends that cross >max_single and raise incidents.
 	meta := map[string]any{
-		"asset":     asset,
-		"price_usd": round2(price),
-		"source":    "coingecko",
-		"fx":        fx,
+		"fx":     fx,
+		"source": "feeder",
+	}
+	amount := pickAmount(rng, merchant.Category, useIDR)
+	if useIDR && merchant.Category == "crypto_exchange" && idr > 0 {
+		amount *= idr
+	}
+	if merchant.Category == "crypto_exchange" {
+		meta["asset"] = asset
+		meta["price_usd"] = round2(price)
 	}
 
 	return models.TransactionInput{
@@ -270,20 +303,28 @@ func (c *config) genTxn(rng *rand.Rand, prices map[string]float64, fx map[string
 		DeviceFingerprint: fmt.Sprintf("dev-%s-%d", loc.country, 1000+rng.Intn(9000)),
 		CountryCode:       loc.country,
 		City:              loc.city,
-		MerchantCategory:  merchants[rng.Intn(len(merchants))],
+		MerchantCategory:  merchant.Category,
+		MerchantName:      merchant.Name,
+		PaymentMethod:     data.RandomPaymentMethod(rng, loc.country),
 		Metadata:          meta,
 		Timestamp:         timePtr(time.Now()),
 	}
 }
 
-// pickAmount returns a USD dollar value: mostly a normal spend, occasionally a
-// large crypto order that crosses the >max_single threshold and raises an
-// incident.
-func pickAmount(rng *rand.Rand) float64 {
-	if rng.Float64() < bigOrderChance {
-		return 11000 + rng.Float64()*30000
+// pickAmount returns a value that looks plausible for the merchant: big crypto
+// orders (USD, occasionally crossing the >max_single threshold), modest daily
+// shopping (USD), and realistic e-wallet-sized rupiah spends for ID.
+func pickAmount(rng *rand.Rand, category string, useIDR bool) float64 {
+	if category == "crypto_exchange" {
+		if rng.Float64() < bigOrderChance {
+			return 11000 + rng.Float64()*30000
+		}
+		return 800 + rng.Float64()*8000
 	}
-	return 150 + rng.Float64()*3850
+	if useIDR {
+		return 15000 + rng.Float64()*1500000
+	}
+	return 8 + rng.Float64()*350
 }
 
 func (c *config) send(ctx context.Context, txn models.TransactionInput) error {

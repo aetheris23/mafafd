@@ -9,8 +9,9 @@ import { Drawer } from "@/components/ui/drawer";
 import { Input, Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loading";
 import { Table, TBody, Td, Th, THead } from "@/components/ui/table";
+import { useLiveEvents } from "@/components/LiveProvider";
 import type { Transaction } from "@/lib/types";
-import { cn, fetchJSON, formatCurrency, formatDateTime, riskColor } from "@/lib/utils";
+import { cn, fetchJSON, formatCurrency, formatDateTime, paymentMethodLabel, riskColor } from "@/lib/utils";
 
 const STATUSES = ["processed", "flagged", "investigated", "resolved", "refunded"];
 
@@ -26,6 +27,9 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [busyId, setBusyId] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const live = useLiveEvents();
+  const filtersRef = useRef({ search, level, status, page });
+  filtersRef.current = { search, level, status, page };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,6 +51,37 @@ export default function TransactionsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live updates: new transactions are prepended and AI results are patched in
+  // as they land, so the page stays fresh without a manual refresh.
+  useEffect(() => {
+    if (live.length === 0) return;
+    const filters = filtersRef.current;
+    let added = 0;
+    setItems((prev) => {
+      let next = prev;
+      let changed = false;
+      for (const ev of live) {
+        if (ev.event === "transaction.processed" && ev.data) {
+          const t = ev.data as Transaction;
+          if (next.some((x) => x.id === t.id)) continue;
+          if (filters.page !== 1) continue;
+          if (!matchesFilters(t, filters)) continue;
+          next = [t, ...next];
+          added++;
+          changed = true;
+        } else if (ev.event === "ai.updated" && ev.data) {
+          const t = ev.data as Transaction;
+          if (next.some((x) => x.id === t.id)) {
+            next = next.map((x) => (x.id === t.id ? { ...x, ...t } : x));
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+    if (added > 0) setTotal((n) => n + added);
+  }, [live]);
 
   const onSearch = (v: string) => {
     setSearch(v);
@@ -71,24 +106,24 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Transactions</h1>
+        <h1 className="font-mono text-base font-semibold uppercase tracking-wider">Transactions</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
             <Input
-              placeholder="Search ext id, card, country…"
+              placeholder="Search ext id, merchant, payment…"
               value={search}
               onChange={(e) => onSearch(e.target.value)}
-              className="w-64 pl-8"
+              className="w-full pl-8 sm:w-64"
             />
           </div>
-          <Select value={level} onChange={(e) => { setLevel(e.target.value); setPage(1); }} className="w-36">
+          <Select value={level} onChange={(e) => { setLevel(e.target.value); setPage(1); }} className="w-full sm:w-36">
             <option value="">All risk</option>
             <option value="LOW">Low</option>
             <option value="SUSPICIOUS">Suspicious</option>
             <option value="HIGH">High</option>
           </Select>
-          <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="w-36">
+          <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="w-full sm:w-36">
             <option value="">All status</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -104,8 +139,9 @@ export default function TransactionsPage() {
               <Th>Time</Th>
               <Th>External ID</Th>
               <Th>Amount</Th>
-              <Th>Card</Th>
-              <Th>Country</Th>
+              <Th>Merchant</Th>
+              <Th>Payment</Th>
+              <Th>Location</Th>
               <Th>Risk</Th>
               <Th>AI</Th>
               <Th>Status</Th>
@@ -113,12 +149,12 @@ export default function TransactionsPage() {
             <TBody>
               {loading && (
                 <tr>
-                  <Td colSpan={8} className="py-8 text-center text-muted-foreground"><Spinner className="mx-auto" /></Td>
+                  <Td colSpan={9} className="py-8 text-center text-muted-foreground"><Spinner className="mx-auto" /></Td>
                 </tr>
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <Td colSpan={8} className="py-8 text-center text-muted-foreground">No transactions found.</Td>
+                  <Td colSpan={9} className="py-8 text-center text-muted-foreground">No transactions found.</Td>
                 </tr>
               )}
               {items.map((t) => (
@@ -126,8 +162,14 @@ export default function TransactionsPage() {
                   <Td className="whitespace-nowrap text-muted-foreground">{formatDateTime(t.transaction_time)}</Td>
                   <Td className="font-mono text-xs">{t.external_id || short(t.id)}</Td>
                   <Td className="font-medium">{formatCurrency(t.amount, t.currency)}</Td>
-                  <Td className="font-mono text-xs text-muted-foreground">{t.card_token}</Td>
-                  <Td>{t.country_code || "-"}</Td>
+                  <Td>
+                    <div className="font-medium">{t.merchant_name || "-"}</div>
+                    {t.merchant_category && (
+                      <div className="text-xs text-muted-foreground">{t.merchant_category}</div>
+                    )}
+                  </Td>
+                  <Td className="whitespace-nowrap text-xs text-muted-foreground">{paymentMethodLabel(t.payment_method)}</Td>
+                  <Td className="whitespace-nowrap text-muted-foreground">{t.city ? `${t.city}, ${t.country_code || ""}` : (t.country_code || "-")}</Td>
                   <Td>
                     <div className="flex items-center gap-2">
                       <Badge className={riskColor(t.risk_level)}>{t.risk_level}</Badge>
@@ -164,17 +206,28 @@ export default function TransactionsPage() {
       <Drawer open={!!selected} onClose={() => setSelected(null)} title={selected ? `Transaction ${selected.external_id || short(selected.id)}` : ""}>
         {selected && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <Info k="Amount" v={`${formatCurrency(selected.amount, selected.currency)}`} />
-              <Info k="Risk score" v={`${selected.risk_score.toFixed(1)} (${selected.risk_level})`} />
-              <Info k="Deterministic" v={selected.deterministic_score.toFixed(1)} />
-              <Info k="AI verdict" v={selected.ai_verdict || "—"} />
-              <Info k="AI score" v={selected.ai_score != null ? selected.ai_score.toFixed(1) : "—"} />
-              <Info k="Country / city" v={`${selected.country_code || "-"} / ${selected.city || "-"}`} />
-              <Info k="Card" v={selected.card_token} mono />
-              <Info k="IP" v={selected.ip_address || "-"} mono />
-              <Info k="Merchant category" v={selected.merchant_category || "-"} />
-              <Info k="Processed at" v={formatDateTime(selected.processed_at)} />
+            <div>
+              <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Purchase details</h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <Info k="Merchant" v={selected.merchant_name || "-"} />
+                <Info k="Merchant category" v={selected.merchant_category || "-"} />
+                <Info k="Payment method" v={paymentMethodLabel(selected.payment_method)} />
+                <Info k="Amount" v={`${formatCurrency(selected.amount, selected.currency)}`} />
+                <Info k="Location" v={`${selected.city || "-"}, ${selected.country_code || "-"}`} />
+                <Info k="Card" v={selected.card_token} mono />
+                <Info k="IP" v={selected.ip_address || "-"} mono />
+                <Info k="Transaction time" v={formatDateTime(selected.transaction_time)} />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk assessment</h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <Info k="Risk score" v={`${selected.risk_score.toFixed(1)} (${selected.risk_level})`} />
+                <Info k="Deterministic" v={selected.deterministic_score.toFixed(1)} />
+                <Info k="AI verdict" v={selected.ai_verdict || "—"} />
+                <Info k="AI score" v={selected.ai_score != null ? selected.ai_score.toFixed(1) : "—"} />
+              </div>
             </div>
 
             {selected.rule_breakdown && selected.rule_breakdown.length > 0 && (
@@ -236,4 +289,18 @@ function Info({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
 
 function short(id: string) {
   return id.slice(0, 8);
+}
+
+function matchesFilters(t: Transaction, f: { search: string; level: string; status: string }) {
+  if (f.level && t.risk_level !== f.level) return false;
+  if (f.status && t.status !== f.status) return false;
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    const hay = [t.external_id, t.merchant_name, t.payment_method, t.id]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
 }

@@ -74,15 +74,15 @@ export default function IncidentsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Incidents</h1>
-        <div className="flex items-center gap-2">
-          <Select value={level} onChange={(e) => { setLevel(e.target.value); setPage(1); }} className="w-36">
+        <h1 className="font-mono text-base font-semibold uppercase tracking-wider">Incidents</h1>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Select value={level} onChange={(e) => { setLevel(e.target.value); setPage(1); }} className="w-full sm:w-36">
             <option value="">All risk</option>
             <option value="LOW">Low</option>
             <option value="SUSPICIOUS">Suspicious</option>
             <option value="HIGH">High</option>
           </Select>
-          <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="w-40">
+          <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="w-full sm:w-40">
             <option value="">All status</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>{s}</option>

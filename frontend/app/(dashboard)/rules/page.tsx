@@ -105,7 +105,7 @@ export default function RulesPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">Rules Engine</h1>
+          <h1 className="font-mono text-base font-semibold uppercase tracking-wider">Rules Engine</h1>
           <p className="text-sm text-muted-foreground">
             Deterministic pre-AI scoring. Changes propagate to the worker within ~30s (cached) or instantly via cache eviction.
           </p>

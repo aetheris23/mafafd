@@ -16,6 +16,9 @@ const BASE_PAYLOADS = Array.from({ length: 20 }, (_, i) => ({
   ip_address: `203.0.113.${i}`,
   country_code: "US",
   city: "New York",
+  merchant_category: "online_retail",
+  merchant_name: "Amazon",
+  payment_method: "card_visa",
 }));
 function makePayload() { return JSON.stringify(BASE_PAYLOADS[__ITER % BASE_PAYLOADS.length]); }
 

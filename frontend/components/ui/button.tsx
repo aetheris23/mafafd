@@ -8,11 +8,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<string, string> = {
-  primary: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+  primary: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-retro-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
   secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
   ghost: "hover:bg-accent text-foreground",
-  destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-  outline: "border border-border bg-transparent hover:bg-accent",
+  destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-retro-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+  outline: "border border-border bg-transparent hover:bg-accent shadow-retro-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
 };
 
 const sizes: Record<string, string> = {
@@ -25,7 +25,7 @@ export function Button({ variant = "primary", size = "md", className, children, 
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-all duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
         variants[variant],
         sizes[size],
         className,

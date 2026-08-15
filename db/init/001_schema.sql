@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     country_code           CHAR(2),
     city                   TEXT,
     merchant_category      TEXT,
+    merchant_name          TEXT,                     -- where the purchase happened (e.g. Tokopedia, Starbucks)
+    payment_method         TEXT,                     -- how it was paid (e.g. e_wallet_gopay, card_visa, bank_transfer)
     metadata               JSONB NOT NULL DEFAULT '{}',
     risk_score             DOUBLE PRECISION NOT NULL DEFAULT 0,
     risk_level             TEXT NOT NULL DEFAULT 'LOW',
@@ -83,6 +85,10 @@ CREATE INDEX IF NOT EXISTS idx_txn_tenant_time   ON transactions (tenant_id, tra
 CREATE INDEX IF NOT EXISTS idx_txn_tenant_risk   ON transactions (tenant_id, risk_score DESC);
 CREATE INDEX IF NOT EXISTS idx_txn_tenant_status ON transactions (tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_txn_tenant_times  ON transactions (tenant_id, transaction_time);
+
+-- Idempotent upgrades for databases created before these columns existed.
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS merchant_name  TEXT;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_method TEXT;
 
 -- ---------------------------------------------------------------------------
 -- anomaly_incidents: analyst triage queue

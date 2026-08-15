@@ -242,9 +242,9 @@ func (s *Store) CreateUser(ctx context.Context, tenantID uuid.UUID, email, hash 
 
 const txnCols = `id, tenant_id, external_id, amount, currency, customer_id_hash,
 	customer_email_hash, card_token, ip_address, device_fingerprint_hash, country_code,
-	city, merchant_category, metadata, risk_score, risk_level, deterministic_score,
-	ai_score, ai_verdict, ai_explanation, rule_breakdown, is_anomaly, status,
-	transaction_time, created_at, processed_at`
+	city, merchant_category, merchant_name, payment_method, metadata, risk_score,
+	risk_level, deterministic_score, ai_score, ai_verdict, ai_explanation,
+	rule_breakdown, is_anomaly, status, transaction_time, created_at, processed_at`
 
 type txnScan struct {
 	tx *models.Transaction
@@ -256,6 +256,7 @@ func scanTxn(row pgx.Row) (*models.Transaction, error) {
 	err := row.Scan(&t.ID, &t.TenantID, &t.ExternalID, &t.Amount, &t.Currency,
 		&t.CustomerIDHash, &t.CustomerEmailHash, &t.CardToken, &t.IPAddress,
 		&t.DeviceFingerprintHash, &t.CountryCode, &t.City, &t.MerchantCategory,
+		&t.MerchantName, &t.PaymentMethod,
 		&metadata, &t.RiskScore, &t.RiskLevel, &t.DeterministicScore,
 		&t.AIScore, &t.AIVerdict, &t.AIExplanation, &breakdown, &t.IsAnomaly,
 		&t.Status, &t.TransactionTime, &t.CreatedAt, &t.ProcessedAt)
@@ -275,16 +276,18 @@ func (s *Store) InsertTransaction(ctx context.Context, t *models.Transaction) er
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO transactions (id, tenant_id, external_id, amount, currency,
 			customer_id_hash, customer_email_hash, card_token, ip_address,
-			device_fingerprint_hash, country_code, city, merchant_category, metadata,
-			risk_score, risk_level, deterministic_score, ai_score, ai_verdict,
-			ai_explanation, rule_breakdown, is_anomaly, status, transaction_time, processed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+			device_fingerprint_hash, country_code, city, merchant_category, merchant_name,
+			payment_method, metadata, risk_score, risk_level, deterministic_score,
+			ai_score, ai_verdict, ai_explanation, rule_breakdown, is_anomaly, status,
+			transaction_time, processed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
 		ON CONFLICT (id) DO NOTHING`,
 		t.ID, t.TenantID, t.ExternalID, t.Amount, t.Currency,
 		t.CustomerIDHash, t.CustomerEmailHash, t.CardToken, t.IPAddress,
-		t.DeviceFingerprintHash, t.CountryCode, t.City, t.MerchantCategory, metadata,
-		t.RiskScore, string(t.RiskLevel), t.DeterministicScore, t.AIScore, t.AIVerdict,
-		t.AIExplanation, breakdown, t.IsAnomaly, string(t.Status), t.TransactionTime, t.ProcessedAt)
+		t.DeviceFingerprintHash, t.CountryCode, t.City, t.MerchantCategory, t.MerchantName,
+		t.PaymentMethod, metadata, t.RiskScore, string(t.RiskLevel), t.DeterministicScore,
+		t.AIScore, t.AIVerdict, t.AIExplanation, breakdown, t.IsAnomaly, string(t.Status),
+		t.TransactionTime, t.ProcessedAt)
 	return err
 }
 
@@ -298,7 +301,7 @@ func (s *Store) ListTransactions(ctx context.Context, tenantID uuid.UUID, f TxFi
 	args := []any{tenantID}
 	if f.Search != "" {
 		args = append(args, "%"+f.Search+"%")
-		where += fmt.Sprintf(" AND (external_id ILIKE $%d OR card_token ILIKE $%d OR customer_email_hash ILIKE $%d)", len(args), len(args), len(args))
+		where += fmt.Sprintf(" AND (external_id ILIKE $%d OR card_token ILIKE $%d OR customer_email_hash ILIKE $%d OR merchant_name ILIKE $%d OR payment_method ILIKE $%d)", len(args), len(args), len(args), len(args), len(args))
 	}
 	if f.MinRisk > 0 {
 		args = append(args, f.MinRisk)
@@ -497,17 +500,17 @@ func (s *Store) UpsertRuleConfig(ctx context.Context, tenantID uuid.UUID, data [
 // ---------------------------------------------------------------------------
 
 type Overview struct {
-	TxTotal          int64     `json:"tx_total"`
-	TxLastMinute     int64     `json:"tx_last_minute"`
-	TxLastHour       int64     `json:"tx_last_hour"`
-	AnomalyCount     int64     `json:"anomaly_count"`
-	OpenIncidents    int64     `json:"open_incidents"`
-	AvgRisk          float64   `json:"avg_risk"`
-	HighRiskCount    int64     `json:"high_risk_count"`
-	ProcessedCount   int64     `json:"processed_count"`
-	DeterministicCount int64   `json:"deterministic_count"`
-	AICount          int64     `json:"ai_count"`
-	LastProcessed    time.Time `json:"last_processed"`
+	TxTotal            int64     `json:"tx_total"`
+	TxLastMinute       int64     `json:"tx_last_minute"`
+	TxLastHour         int64     `json:"tx_last_hour"`
+	AnomalyCount       int64     `json:"anomaly_count"`
+	OpenIncidents      int64     `json:"open_incidents"`
+	AvgRisk            float64   `json:"avg_risk"`
+	HighRiskCount      int64     `json:"high_risk_count"`
+	ProcessedCount     int64     `json:"processed_count"`
+	DeterministicCount int64     `json:"deterministic_count"`
+	AICount            int64     `json:"ai_count"`
+	LastProcessed      time.Time `json:"last_processed"`
 }
 
 func (s *Store) GetOverview(ctx context.Context, tenantID uuid.UUID) (*Overview, error) {
@@ -534,11 +537,11 @@ func (s *Store) GetOverview(ctx context.Context, tenantID uuid.UUID) (*Overview,
 }
 
 type Bucket struct {
-	Ts            time.Time `json:"ts"`
-	Count         int64     `json:"count"`
-	Anomalies     int64     `json:"anomalies"`
-	AvgRisk       float64   `json:"avg_risk"`
-	SumAmount     float64   `json:"sum_amount"`
+	Ts        time.Time `json:"ts"`
+	Count     int64     `json:"count"`
+	Anomalies int64     `json:"anomalies"`
+	AvgRisk   float64   `json:"avg_risk"`
+	SumAmount float64   `json:"sum_amount"`
 }
 
 func (s *Store) Timeseries(ctx context.Context, tenantID uuid.UUID, bucket string, since time.Time) ([]Bucket, error) {
@@ -612,15 +615,15 @@ func (s *Store) InsertAudit(ctx context.Context, tenantID, actor *uuid.UUID, act
 // ---------------------------------------------------------------------------
 
 type TxFilter struct {
-	Search  string
-	MinRisk float64
-	Level   string
-	Status  string
+	Search   string
+	MinRisk  float64
+	Level    string
+	Status   string
 	Currency string
-	From    time.Time
-	To      time.Time
-	Page    int
-	PerPage int
+	From     time.Time
+	To       time.Time
+	Page     int
+	PerPage  int
 }
 
 type IncidentFilter struct {
@@ -631,7 +634,7 @@ type IncidentFilter struct {
 }
 
 var (
-	ErrNotFound       = errors.New("not found")
+	ErrNotFound        = errors.New("not found")
 	ErrTenantSuspended = errors.New("tenant suspended")
 )
 
@@ -653,16 +656,18 @@ func (s *Store) BatchInsert(ctx context.Context, b *TransactionBatch) error {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO transactions (id, tenant_id, external_id, amount, currency,
 				customer_id_hash, customer_email_hash, card_token, ip_address,
-				device_fingerprint_hash, country_code, city, merchant_category, metadata,
-				risk_score, risk_level, deterministic_score, ai_score, ai_verdict,
-				ai_explanation, rule_breakdown, is_anomaly, status, transaction_time, created_at, processed_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+				device_fingerprint_hash, country_code, city, merchant_category, merchant_name,
+				payment_method, metadata, risk_score, risk_level, deterministic_score,
+				ai_score, ai_verdict, ai_explanation, rule_breakdown, is_anomaly, status,
+				transaction_time, created_at, processed_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
 			ON CONFLICT (id) DO NOTHING`,
 			t.ID, t.TenantID, t.ExternalID, t.Amount, t.Currency,
 			t.CustomerIDHash, t.CustomerEmailHash, t.CardToken, t.IPAddress,
-			t.DeviceFingerprintHash, t.CountryCode, t.City, t.MerchantCategory, metadata,
-			t.RiskScore, string(t.RiskLevel), t.DeterministicScore, t.AIScore, t.AIVerdict,
-			t.AIExplanation, breakdown, t.IsAnomaly, string(t.Status), t.TransactionTime, t.CreatedAt, t.ProcessedAt); err != nil {
+			t.DeviceFingerprintHash, t.CountryCode, t.City, t.MerchantCategory, t.MerchantName,
+			t.PaymentMethod, metadata, t.RiskScore, string(t.RiskLevel), t.DeterministicScore,
+			t.AIScore, t.AIVerdict, t.AIExplanation, breakdown, t.IsAnomaly, string(t.Status),
+			t.TransactionTime, t.CreatedAt, t.ProcessedAt); err != nil {
 			return err
 		}
 	}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Area,
   AreaChart,
@@ -25,21 +26,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/loading";
-import { useLiveEvent } from "@/components/LiveProvider";
-import type { Bucket, Incident, Overview, WSEvent } from "@/lib/types";
+import { useLiveEvents, type LiveEvent } from "@/components/LiveProvider";
+import type { Bucket, Incident, Overview } from "@/lib/types";
 import { fetchJSON, formatCompact, formatCurrency, formatNumber, formatTime, incidentColor, riskColor } from "@/lib/utils";
 
-const PIE_COLORS = ["#10b981", "#f59e0b", "#ef4444"];
+const PIE_COLORS = ["#22c55e", "#f59e0b", "#ef4444"];
 
 export default function OverviewPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [series, setSeries] = useState<Bucket[]>([]);
   const [distribution, setDistribution] = useState<{ level: string; value: number }[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [liveFeed, setLiveFeed] = useState<WSEvent[]>([]);
-  const feedRef = useRef<WSEvent[]>([]);
+  const [liveFeed, setLiveFeed] = useState<LiveEvent[]>([]);
+  const feedRef = useRef<LiveEvent[]>([]);
 
-  const { last } = useLiveEvent();
+  const router = useRouter();
+  const live = useLiveEvents();
 
   useEffect(() => {
     fetchJSON<Overview>("/api/v1/stats/overview").then(setOverview).catch(() => {});
@@ -61,33 +63,38 @@ export default function OverviewPage() {
   }, []);
 
   useEffect(() => {
-    if (!last) return;
-    const ev = last;
-    feedRef.current = [ev, ...feedRef.current].slice(0, 12);
+    if (live.length === 0) return;
+    feedRef.current = [...live.slice().reverse(), ...feedRef.current].slice(0, 12);
     setLiveFeed([...feedRef.current]);
-    if (ev.event === "transaction.processed" && ev.data) {
-      setOverview((o) =>
-        o
-          ? {
-              ...o,
-              tx_total: o.tx_total + 1,
-              tx_last_minute: o.tx_last_minute + 1,
-              tx_last_hour: o.tx_last_hour + 1,
-              anomaly_count: o.anomaly_count + (ev.data?.is_anomaly ? 1 : 0),
-              last_processed: ev.at,
-            }
-          : o,
-      );
+    for (const ev of live) {
+      if (ev.event === "transaction.processed" && ev.data) {
+        setOverview((o) =>
+          o
+            ? {
+                ...o,
+                tx_total: o.tx_total + 1,
+                tx_last_minute: o.tx_last_minute + 1,
+                tx_last_hour: o.tx_last_hour + 1,
+                anomaly_count: o.anomaly_count + (ev.data?.is_anomaly ? 1 : 0),
+                last_processed: ev.at,
+              }
+            : o,
+        );
+      }
+      if (ev.event === "incident.flagged" && ev.data) {
+        setOverview((o) => (o ? { ...o, open_incidents: o.open_incidents + 1 } : o));
+        setIncidents((prev) => [ev.data, ...prev].slice(0, 6));
+      }
+      if (ev.event === "ai.updated") {
+        setOverview((o) => (o ? { ...o, ai_count: o.ai_count + 1 } : o));
+      }
     }
-    if (ev.event === "incident.flagged" && ev.data) {
-      setOverview((o) => (o ? { ...o, open_incidents: o.open_incidents + 1 } : o));
-      setIncidents((prev) => [ev.data, ...prev].slice(0, 6));
-    }
-  }, [last]);
+  }, [live]);
 
-  const onIncidentClick = useCallback((incidentId: string) => {
-    window.location.href = `/incidents?focus=${incidentId}`;
-  }, []);
+  const onIncidentClick = useCallback(
+    (incidentId: string) => router.push(`/incidents?focus=${incidentId}`),
+    [router],
+  );
 
   if (!overview) {
     return (
@@ -107,7 +114,7 @@ export default function OverviewPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Overview</h1>
+        <h1 className="font-mono text-base font-semibold uppercase tracking-wider">Overview</h1>
         {overview.last_processed && (
           <span className="text-xs text-muted-foreground">Last processed {formatTime(overview.last_processed)}</span>
         )}
@@ -154,22 +161,22 @@ export default function OverviewPage() {
                 <AreaChart data={series} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gCount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gAnom" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#ef4444" stopOpacity={0.45} />
                       <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 18%)" />
-                  <XAxis dataKey="ts" stroke="hsl(220 10% 50%)" fontSize={10} tickFormatter={(v) => v} />
-                  <YAxis stroke="hsl(220 10% 50%)" fontSize={10} allowDecimals={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(155 12% 16%)" />
+                  <XAxis dataKey="ts" stroke="hsl(150 12% 50%)" fontSize={10} tickFormatter={(v) => v} />
+                  <YAxis stroke="hsl(150 12% 50%)" fontSize={10} allowDecimals={false} />
                   <Tooltip
-                    contentStyle={{ background: "hsl(220 25% 9%)", border: "1px solid hsl(220 13% 20%)", borderRadius: 8 }}
-                    labelStyle={{ color: "hsl(220 15% 80%)" }}
+                    contentStyle={{ background: "hsl(160 15% 9%)", border: "1px solid hsl(155 12% 18%)", borderRadius: 6 }}
+                    labelStyle={{ color: "hsl(150 15% 80%)" }}
                   />
-                  <Area type="monotone" dataKey="count" name="Transactions" stroke="#10b981" fill="url(#gCount)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="count" name="Transactions" stroke="#22c55e" fill="url(#gCount)" strokeWidth={2} />
                   <Area type="monotone" dataKey="anomalies" name="Anomalies" stroke="#ef4444" fill="url(#gAnom)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -191,7 +198,7 @@ export default function OverviewPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: "hsl(220 25% 9%)", border: "1px solid hsl(220 13% 20%)", borderRadius: 8 }}
+                    contentStyle={{ background: "hsl(160 15% 9%)", border: "1px solid hsl(155 12% 18%)", borderRadius: 6 }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -250,8 +257,8 @@ export default function OverviewPage() {
                 Waiting for events… send a transaction to <code className="rounded bg-muted px-1">POST /api/v1/transactions</code>
               </p>
             )}
-            {liveFeed.map((ev, i) => (
-              <div key={`${ev.at}-${i}`} className="flex items-center gap-2.5 rounded-md border border-border/40 px-3 py-1.5 text-xs">
+            {liveFeed.map((ev) => (
+              <div key={ev.seq} className="flex items-center gap-2.5 rounded-md border border-border/40 px-3 py-1.5 text-xs">
                 <span
                   className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
                     ev.event === "incident.flagged" ? "bg-red-500" : "bg-emerald-400"

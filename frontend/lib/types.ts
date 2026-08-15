@@ -29,6 +29,8 @@ export interface Transaction {
   country_code: string;
   city: string;
   merchant_category: string;
+  merchant_name: string;
+  payment_method: string;
   risk_score: number;
   risk_level: RiskLevel;
   deterministic_score: number;

@@ -2,10 +2,10 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loading";
+import { Logo } from "@/components/Logo";
 import { login } from "@/lib/useAuth";
 
 export default function LoginPage() {
@@ -42,18 +42,20 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <ShieldAlert size={26} />
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-md border border-primary/30 text-primary shadow-retro">
+            <Logo size={34} />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">MAFAFD</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.25em] text-foreground">
+            MAFAFD
+          </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
             Multi-Tenant AI Financial Anomaly & Fraud Detector
           </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-xl">
+        <form onSubmit={submit} className="space-y-4 rounded-md border border-border bg-card p-6 shadow-retro">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Email</label>
+            <label className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Email</label>
             <Input
               type="email"
               required
@@ -64,7 +66,7 @@ function LoginForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Password</label>
+            <label className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Password</label>
             <Input
               type="password"
               required
@@ -76,7 +78,7 @@ function LoginForm() {
           </div>
 
           {error && (
-            <div className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            <div className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 font-mono text-xs text-red-400">
               {error}
             </div>
           )}
@@ -87,7 +89,7 @@ function LoginForm() {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p className="mt-6 text-center font-mono text-[11px] text-muted-foreground">
           Demo: admin@acme.dev / Acme-Admin-2026! · platform@mafafd.dev / Mafafd-Platform-2026!
         </p>
       </div>

@@ -64,7 +64,7 @@ func (p *GeminiProvider) Analyze(ctx context.Context, in Input) (*Result, error)
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
 		p.model, p.apiKey)
 	body, _ := json.Marshal(geminiReq{
-		Contents: []geminiContent{{Role: "user", Parts: []geminiPart{{Text: Prompt(in)}}}},
+		Contents:         []geminiContent{{Role: "user", Parts: []geminiPart{{Text: Prompt(in)}}}},
 		GenerationConfig: geminiGen{ResponseMimeType: "application/json", Temperature: 0.2},
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))

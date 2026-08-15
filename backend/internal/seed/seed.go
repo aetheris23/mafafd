@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/mafafd/backend/internal/ai"
+	"github.com/mafafd/backend/internal/data"
 	"github.com/mafafd/backend/internal/models"
 	"github.com/mafafd/backend/internal/ruleengine"
 	"github.com/mafafd/backend/internal/security"
@@ -141,6 +143,7 @@ func seedHistoricalTransactions(ctx context.Context, st *store.Store, tenantID u
 				amount = 5000 + float64(rng.Intn(15000))
 			}
 			cur := currencies[rng.Intn(len(currencies))]
+			merchant := data.RandomMerchant(rng, p.cc)
 
 			// deterministic-ish score preview
 			score := 8 + rng.Float64()*12
@@ -150,6 +153,10 @@ func seedHistoricalTransactions(ctx context.Context, st *store.Store, tenantID u
 			level := classifySeed(score)
 			isAnomaly := score >= 40
 			txID := uuid.New()
+			breakdown := []models.RuleScore{}
+			if isAnomaly {
+				breakdown = seededBreakdown(rng, amount, cur, p.cc)
+			}
 			tx := models.Transaction{
 				ID:                    txID,
 				TenantID:              tenantID,
@@ -163,7 +170,9 @@ func seedHistoricalTransactions(ctx context.Context, st *store.Store, tenantID u
 				DeviceFingerprintHash: p.dev,
 				CountryCode:           p.cc,
 				City:                  p.city,
-				MerchantCategory:      []string{"retail", "travel", "digital", "food"}[rng.Intn(4)],
+				MerchantCategory:      merchant.Category,
+				MerchantName:          merchant.Name,
+				PaymentMethod:         data.RandomPaymentMethod(rng, p.cc),
 				RiskScore:             score,
 				RiskLevel:             level,
 				DeterministicScore:    score,
@@ -171,11 +180,16 @@ func seedHistoricalTransactions(ctx context.Context, st *store.Store, tenantID u
 				TransactionTime:       ts,
 				CreatedAt:             ts,
 				IsAnomaly:             isAnomaly,
-				RuleBreakdown:         []models.RuleScore{},
+				RuleBreakdown:         breakdown,
 				Metadata:              map[string]any{"base_currency": "USD", "seeded": true},
 			}
 			if isAnomaly {
 				tx.Status = models.TxnFlagged
+				expl := ai.LocalExplain(&tx, tx.RuleBreakdown, nil, score)
+				scorePtr := score
+				tx.AIScore = &scorePtr
+				tx.AIVerdict = string(level)
+				tx.AIExplanation = expl
 				batch.Incidents = append(batch.Incidents, models.Incident{
 					ID:            uuid.New(),
 					TenantID:      tenantID,
@@ -183,6 +197,7 @@ func seedHistoricalTransactions(ctx context.Context, st *store.Store, tenantID u
 					RiskScore:     score,
 					RiskLevel:     level,
 					Reason:        "seeded anomaly pattern",
+					AIExplanation: expl,
 					Status:        models.IncidentOpen,
 					CreatedAt:     ts,
 					UpdatedAt:     ts,
@@ -216,6 +231,59 @@ func classifySeed(score float64) models.RiskLevel {
 	default:
 		return models.RiskLow
 	}
+}
+
+// seededBreakdown builds a plausible deterministic rule breakdown for seeded
+// anomalies so the AI explanation reads logically instead of generically.
+func seededBreakdown(rng *rand.Rand, amount float64, currency, country string) []models.RuleScore {
+	maxSingle, suspicious := 10000.00, 3000.00
+	switch currency {
+	case "IDR":
+		maxSingle, suspicious = 15_000_000.00, 3_000_000.00
+	case "JPY":
+		maxSingle, suspicious = 1_000_000.00, 300_000.00
+	}
+	out := []models.RuleScore{
+		{
+			Rule:   "velocity_customer",
+			Score:  40 + rng.Float64()*20,
+			Weight: 0.25,
+			Detail: fmt.Sprintf("%d transactions for customer in 600s window (limit 5)", 6+rng.Intn(4)),
+		},
+	}
+	switch {
+	case amount >= maxSingle:
+		out = append(out, models.RuleScore{
+			Rule:   "amount_max",
+			Score:  60,
+			Weight: 0.20,
+			Detail: fmt.Sprintf("amount %.2f exceeds max single %.2f", amount, maxSingle),
+		})
+	case amount >= suspicious:
+		out = append(out, models.RuleScore{
+			Rule:   "amount_suspicious",
+			Score:  30,
+			Weight: 0.20,
+			Detail: fmt.Sprintf("amount %.2f above suspicious threshold %.2f", amount, suspicious),
+		})
+	}
+	if country != "" && country != "ID" && country != "US" {
+		out = append(out, models.RuleScore{
+			Rule:   "geo_unknown",
+			Score:  30 + rng.Float64()*20,
+			Weight: 0.15,
+			Detail: fmt.Sprintf("country %s not in allowlist", country),
+		})
+	}
+	if rng.Float64() < 0.3 {
+		out = append(out, models.RuleScore{
+			Rule:   "velocity_card",
+			Score:  25 + rng.Float64()*15,
+			Weight: 0.20,
+			Detail: fmt.Sprintf("%d transactions for card in 600s", 3+rng.Intn(3)),
+		})
+	}
+	return out
 }
 
 func contains(list []int, v int) bool {

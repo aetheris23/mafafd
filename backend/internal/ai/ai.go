@@ -45,6 +45,8 @@ func MaskForExternal(in Input) map[string]any {
 		"country":              t.CountryCode,
 		"city":                 t.City,
 		"merchant_category":    t.MerchantCategory,
+		"merchant":             t.MerchantName,
+		"payment_method":       t.PaymentMethod,
 		"transaction_time_utc": t.TransactionTime.UTC().Format(time.RFC3339),
 		"hour_of_day_utc":      t.TransactionTime.UTC().Hour(),
 		"day_of_week_utc":      t.TransactionTime.UTC().Weekday().String(),

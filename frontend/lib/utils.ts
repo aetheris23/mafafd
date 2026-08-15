@@ -45,6 +45,26 @@ export function formatTime(iso: string | undefined) {
   }
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  e_wallet_gopay: "GoPay · E-wallet",
+  e_wallet_ovo: "OVO · E-wallet",
+  e_wallet_dana: "DANA · E-wallet",
+  e_wallet_shopeepay: "ShopeePay · E-wallet",
+  e_wallet_linkaja: "LinkAja · E-wallet",
+  card_visa: "Visa · Card",
+  card_mastercard: "Mastercard · Card",
+  card_jcb: "JCB · Card",
+  bank_transfer: "Bank transfer",
+  paypal: "PayPal · Wallet",
+  apple_pay: "Apple Pay · Wallet",
+  google_pay: "Google Pay · Wallet",
+};
+
+export function paymentMethodLabel(code: string) {
+  if (!code) return "-";
+  return PAYMENT_METHOD_LABELS[code] || code.replaceAll("_", " ");
+}
+
 export function riskColor(level: string) {
   switch (level) {
     case "HIGH":

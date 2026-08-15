@@ -68,7 +68,7 @@ export default function ApiKeysPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">API Keys</h1>
+      <h1 className="font-mono text-base font-semibold uppercase tracking-wider">API Keys</h1>
 
       <Card>
         <CardHeader>

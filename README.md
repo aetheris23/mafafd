@@ -64,6 +64,21 @@ no Docker, no RabbitMQ, no API keys required. The default `.env` uses
 **Prerequisites:** Go 1.26+, Node 24+, Redis 7.x, PostgreSQL 15+ (`initdb` /
 `pg_ctl`), `curl`.
 
+### One command — everything at once
+
+```bash
+cp .env.example .env      # first run only
+make dev                  # infra + backend + feeder + frontend, all in one shot
+```
+
+`make db-reset` drops the `mafafd` database and recreates it (schema applied;
+stops backend services first so nothing blocks the drop). `make dev-fresh` does
+the same reset and then boots the whole stack, so the demo tenant and realistic
+historical transactions (merchant, e-wallet payment method, location) are
+re-seeded automatically. Stop everything with `make stop-all`.
+
+### Step-by-step (equivalent, for debugging)
+
 ```bash
 # 1) Local infrastructure (own Postgres cluster on :5433 + Redis on :6379)
 make infra-start          # init + start Postgres, apply schema, start Redis
@@ -110,7 +125,9 @@ curl -X POST http://localhost:8080/api/v1/transactions \
   -d '{"external_id":"t-1001","amount":4500.00,"currency":"USD",
        "customer_id":"c-7781","customer_email":"user@acme.dev",
        "card_token":"tok_visa_abc123","ip_address":"198.51.100.23",
-       "device_fingerprint":"dev-fp-1","country_code":"US","city":"NYC"}'
+       "device_fingerprint":"dev-fp-1","country_code":"US","city":"NYC",
+       "merchant_category":"online_retail","merchant_name":"Amazon",
+       "payment_method":"card_visa"}'
 ```
 
 Response is `202 Accepted` (`estimated_processing_ms` is the full handler time —
@@ -121,6 +138,10 @@ dashboard.
 ### Useful Makefile targets
 
 ```bash
+make dev                  # one command: infra + backend + feeder + frontend
+make db-reset             # drop mafafd DB + recreate (schema applied, re-seed on next boot)
+make dev-fresh            # db-reset + dev: clean DB then boot everything
+make stop-all             # stop backend services + feeder + frontend + infra
 make test                 # go test ./...
 make lint                 # go vet ./... + tsc
 make run                  # build + start the four backend services

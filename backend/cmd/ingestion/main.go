@@ -27,12 +27,12 @@ import (
 )
 
 type app struct {
-	cfg    *config.Config
-	log    zerolog.Logger
+	cfg     *config.Config
+	log     zerolog.Logger
 	metrics *telemetry.Metrics
-	st     *store.Store
-	cache  *cache.Cache
-	broker mq.Broker
+	st      *store.Store
+	cache   *cache.Cache
+	broker  mq.Broker
 }
 
 func main() {
@@ -114,13 +114,13 @@ func (a *app) ready(c *fiber.Ctx) error {
 }
 
 type txnResponse struct {
-	TransactionID   string    `json:"transaction_id"`
-	Status          string    `json:"status"`
-	Processing      string    `json:"processing"`
-	ReceivedAt      time.Time `json:"received_at"`
-	RiskAssessment  string    `json:"risk_assessment"`
-	EstMs           float64   `json:"estimated_processing_ms"`
-	RequestID       string    `json:"request_id"`
+	TransactionID  string    `json:"transaction_id"`
+	Status         string    `json:"status"`
+	Processing     string    `json:"processing"`
+	ReceivedAt     time.Time `json:"received_at"`
+	RiskAssessment string    `json:"risk_assessment"`
+	EstMs          float64   `json:"estimated_processing_ms"`
+	RequestID      string    `json:"request_id"`
 }
 
 // handleTransaction is the hot path: auth -> rate limit -> validate -> mask -> publish.
@@ -204,24 +204,26 @@ func (a *app) handleTransaction(c *fiber.Ctx) error {
 		ts = in.Timestamp.UTC()
 	}
 	tx := &models.Transaction{
-		ID:                  uuid.New(),
-		TenantID:            creds.Tenant.ID,
-		ExternalID:          in.ExternalID,
-		Amount:              in.Amount,
-		Currency:            strings.ToUpper(in.Currency),
-		CustomerIDHash:      security.MaskID(in.CustomerID),
-		CustomerEmailHash:   security.MaskEmail(in.CustomerEmail),
-		CardToken:           security.MaskCard(in.CardToken),
-		IPAddress:           in.IPAddress,
+		ID:                    uuid.New(),
+		TenantID:              creds.Tenant.ID,
+		ExternalID:            in.ExternalID,
+		Amount:                in.Amount,
+		Currency:              strings.ToUpper(in.Currency),
+		CustomerIDHash:        security.MaskID(in.CustomerID),
+		CustomerEmailHash:     security.MaskEmail(in.CustomerEmail),
+		CardToken:             security.MaskCard(in.CardToken),
+		IPAddress:             in.IPAddress,
 		DeviceFingerprintHash: security.MaskID(in.DeviceFingerprint),
-		CountryCode:         strings.ToUpper(in.CountryCode),
-		City:                in.City,
-		MerchantCategory:    in.MerchantCategory,
-		Metadata:            in.Metadata,
-		Status:              models.TxnProcessed,
-		TransactionTime:     ts,
-		CreatedAt:           time.Now().UTC(),
-		RuleBreakdown:       []models.RuleScore{},
+		CountryCode:           strings.ToUpper(in.CountryCode),
+		City:                  in.City,
+		MerchantCategory:      in.MerchantCategory,
+		MerchantName:          in.MerchantName,
+		PaymentMethod:         in.PaymentMethod,
+		Metadata:              in.Metadata,
+		Status:                models.TxnProcessed,
+		TransactionTime:       ts,
+		CreatedAt:             time.Now().UTC(),
+		RuleBreakdown:         []models.RuleScore{},
 	}
 	if tx.Metadata == nil {
 		tx.Metadata = map[string]any{}
@@ -281,6 +283,12 @@ func validateInput(in *models.TransactionInput) string {
 	}
 	if len(in.CountryCode) > 3 {
 		return "country_code invalid"
+	}
+	if len(in.MerchantName) > 160 {
+		return "merchant_name too long"
+	}
+	if len(in.PaymentMethod) > 64 {
+		return "payment_method too long"
 	}
 	return ""
 }

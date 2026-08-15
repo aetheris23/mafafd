@@ -1,0 +1,31 @@
+# --- Environment / Secrets ---
+.env
+.env.local
+*.env
+!*.env.example
+
+# --- Go ---
+backend/bin/
+backend/dist/
+*.test
+*.out
+
+# --- Node / Next.js ---
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/next-env.d.ts
+
+# --- Tooling / Local infra ---
+tools/
+data/
+*.log
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+
+# --- Static analysis caches ---
+.k6

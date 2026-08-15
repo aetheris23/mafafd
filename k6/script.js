@@ -41,6 +41,9 @@ const BASE_PAYLOADS = Array.from({ length: 20 }, (_, i) => ({
   device_fingerprint: `dev-${i % 3}`,
   country_code: ["US", "ID", "SG"][i % 3],
   city: ["NYC", "Jakarta", "Singapore"][i % 3],
+  merchant_category: ["online_retail", "ride_sharing", "crypto_exchange", "grocery", "food_delivery"][i % 5],
+  merchant_name: ["Amazon", "Tokopedia", "Gojek", "Alfamart", "GoFood"][i % 5],
+  payment_method: ["card_visa", "e_wallet_gopay", "card_mastercard", "e_wallet_dana", "e_wallet_shopeepay"][i % 5],
 }));
 
 function makePayload() {

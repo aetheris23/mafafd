@@ -50,7 +50,7 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Audit Log</h1>
+      <h1 className="font-mono text-base font-semibold uppercase tracking-wider">Audit Log</h1>
       <Card>
         <CardContent className="p-0">
           <Table>

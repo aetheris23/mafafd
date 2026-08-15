@@ -6,49 +6,63 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        border: "hsl(220 13% 12%)",
-        input: "hsl(220 13% 16%)",
-        ring: "hsl(152 60% 45%)",
-        background: "hsl(220 30% 7%)",
-        foreground: "hsl(220 15% 92%)",
+        border: "hsl(155 12% 15%)",
+        input: "hsl(160 12% 12%)",
+        ring: "hsl(150 78% 46%)",
+        background: "hsl(160 22% 5%)",
+        foreground: "hsl(150 20% 90%)",
         primary: {
-          DEFAULT: "hsl(152 60% 45%)",
-          foreground: "hsl(220 30% 7%)",
+          DEFAULT: "hsl(150 78% 46%)",
+          foreground: "hsl(160 40% 5%)",
         },
         secondary: {
-          DEFAULT: "hsl(220 13% 16%)",
-          foreground: "hsl(220 15% 92%)",
+          DEFAULT: "hsl(160 12% 12%)",
+          foreground: "hsl(150 15% 88%)",
         },
         destructive: {
           DEFAULT: "hsl(0 72% 51%)",
           foreground: "hsl(0 0% 100%)",
         },
         muted: {
-          DEFAULT: "hsl(220 13% 14%)",
-          foreground: "hsl(220 10% 60%)",
+          DEFAULT: "hsl(160 12% 11%)",
+          foreground: "hsl(150 12% 55%)",
         },
         accent: {
-          DEFAULT: "hsl(220 13% 20%)",
-          foreground: "hsl(220 15% 92%)",
+          DEFAULT: "hsl(160 14% 16%)",
+          foreground: "hsl(150 15% 90%)",
         },
         card: {
-          DEFAULT: "hsl(220 25% 9%)",
-          foreground: "hsl(220 15% 92%)",
+          DEFAULT: "hsl(160 15% 8%)",
+          foreground: "hsl(150 15% 90%)",
         },
       },
+      fontFamily: {
+        sans: ['"Space Grotesk"', '"Segoe UI"', "system-ui", "sans-serif"],
+        display: ['"Space Grotesk"', '"Segoe UI"', "sans-serif"],
+        mono: ['"IBM Plex Mono"', '"JetBrains Mono"', '"SFMono-Regular"', "Menlo", "Consolas", "monospace"],
+      },
       borderRadius: {
-        lg: "0.5rem",
-        md: "0.375rem",
-        sm: "0.25rem",
+        lg: "0.375rem",
+        md: "0.25rem",
+        sm: "0.125rem",
+      },
+      boxShadow: {
+        retro: "3px 3px 0 0 hsl(155 25% 6%)",
+        "retro-sm": "2px 2px 0 0 hsl(155 25% 6%)",
       },
       keyframes: {
         "pulse-red": {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.4" },
         },
+        blink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
       },
       animation: {
         "pulse-red": "pulse-red 1.5s ease-in-out infinite",
+        blink: "blink 1.1s steps(2, start) infinite",
       },
     },
   },

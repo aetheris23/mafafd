@@ -6,19 +6,51 @@
   :root {
     color-scheme: dark;
   }
+
+  html,
+  body {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv01", "tnum";
+    /* faint CRT grid so the dark theme still feels like a terminal console */
+    background-image:
+      linear-gradient(hsl(150 40% 45% / 0.028) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(150 40% 45% / 0.028) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+
+  ::selection {
+    background: hsl(150 78% 46%);
+    color: hsl(160 40% 5%);
   }
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(220 13% 22%);
-  border-radius: 4px;
+  background: hsl(155 14% 20%);
+  border-radius: 3px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(150 30% 30%);
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+@layer utilities {
+  .retro-shadow {
+    box-shadow: 3px 3px 0 0 hsl(155 25% 6%);
+  }
+  .text-glow {
+    text-shadow: 0 0 14px hsl(150 78% 46% / 0.55);
+  }
 }

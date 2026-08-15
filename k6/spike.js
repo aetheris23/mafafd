@@ -10,6 +10,7 @@ const BASE_PAYLOADS = Array.from({ length: 20 }, (_, i) => ({
   external_id: `spike-${i}`, amount: 50 + Math.floor(Math.random() * 5000), currency: "USD",
   customer_id: `cust-${i}`, customer_email: `cust${i}@example.com`, card_token: `tok_${i}`,
   ip_address: `203.0.113.${i}`, country_code: "US", city: "New York",
+  merchant_category: "crypto_exchange", merchant_name: "Coinbase", payment_method: "card_visa",
 }));
 function makePayload() { return JSON.stringify(BASE_PAYLOADS[__ITER % BASE_PAYLOADS.length]); }
 
