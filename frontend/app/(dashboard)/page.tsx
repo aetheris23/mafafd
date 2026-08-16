@@ -271,7 +271,7 @@ export default function OverviewPage() {
                 )}
                 {ev.event === "transaction.processed" && ev.data && (
                   <span className="ml-auto flex items-center gap-1 font-medium text-muted-foreground">
-                    {formatCurrency(ev.data.amount, ev.data.currency)}
+                    {formatCurrency(ev.data.amount, ev.data.currency, ev.data.country_code)}
                     {ev.data.is_anomaly && <ArrowUpRight size={12} className="text-amber-400" />}
                   </span>
                 )}

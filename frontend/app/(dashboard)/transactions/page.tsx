@@ -161,7 +161,7 @@ export default function TransactionsPage() {
                 <tr key={t.id} className="cursor-pointer transition-colors hover:bg-accent/50" onClick={() => setSelected(t)}>
                   <Td className="whitespace-nowrap text-muted-foreground">{formatDateTime(t.transaction_time)}</Td>
                   <Td className="font-mono text-xs">{t.external_id || short(t.id)}</Td>
-                  <Td className="font-medium">{formatCurrency(t.amount, t.currency)}</Td>
+                  <Td className="font-medium">{formatCurrency(t.amount, t.currency, t.country_code)}</Td>
                   <Td>
                     <div className="font-medium">{t.merchant_name || "-"}</div>
                     {t.merchant_category && (
@@ -212,7 +212,7 @@ export default function TransactionsPage() {
                 <Info k="Merchant" v={selected.merchant_name || "-"} />
                 <Info k="Merchant category" v={selected.merchant_category || "-"} />
                 <Info k="Payment method" v={paymentMethodLabel(selected.payment_method)} />
-                <Info k="Amount" v={`${formatCurrency(selected.amount, selected.currency)}`} />
+                <Info k="Amount" v={`${formatCurrency(selected.amount, selected.currency, selected.country_code)}`} />
                 <Info k="Location" v={`${selected.city || "-"}, ${selected.country_code || "-"}`} />
                 <Info k="Card" v={selected.card_token} mono />
                 <Info k="IP" v={selected.ip_address || "-"} mono />

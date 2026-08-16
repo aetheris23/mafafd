@@ -5,11 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number, currency: string = "USD") {
+export function formatCurrency(amount: number, currency: string = "USD", country?: string) {
+  const isID = country?.toUpperCase() === "ID";
+  const cur = isID ? "IDR" : currency || "USD";
   try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
+    return new Intl.NumberFormat(isID ? "id-ID" : "en-US", { style: "currency", currency: cur }).format(amount);
   } catch {
-    return `$${amount.toFixed(2)}`;
+    return isID ? `Rp ${amount.toFixed(2)}` : `$${amount.toFixed(2)}`;
   }
 }
 
